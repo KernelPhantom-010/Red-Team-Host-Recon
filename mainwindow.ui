@@ -168,6 +168,11 @@
         <string>No Domain Found!</string>
        </property>
       </item>
+      <item row="0" column="4">
+       <property name="text">
+        <string>N/A</string>
+       </property>
+      </item>
      </widget>
     </widget>
     <widget class="QWidget" name="tab_2">

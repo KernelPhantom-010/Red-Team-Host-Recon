@@ -94,6 +94,8 @@ public:
         tableWidget->setItem(0, 2, __qtablewidgetitem14);
         QTableWidgetItem *__qtablewidgetitem15 = new QTableWidgetItem();
         tableWidget->setItem(0, 3, __qtablewidgetitem15);
+        QTableWidgetItem *__qtablewidgetitem16 = new QTableWidgetItem();
+        tableWidget->setItem(0, 4, __qtablewidgetitem16);
         tableWidget->setObjectName("tableWidget");
         tableWidget->setGeometry(QRect(10, 50, 791, 221));
         tableWidget->setFont(font);
@@ -151,7 +153,7 @@ public:
         QTableWidgetItem *___qtablewidgetitem3 = tableWidget->horizontalHeaderItem(3);
         ___qtablewidgetitem3->setText(QCoreApplication::translate("MainWindow", "Domain/Workgroup", nullptr));
         QTableWidgetItem *___qtablewidgetitem4 = tableWidget->horizontalHeaderItem(4);
-        ___qtablewidgetitem4->setText(QCoreApplication::translate("MainWindow", "Logged-in Users", nullptr));
+        ___qtablewidgetitem4->setText(QCoreApplication::translate("MainWindow", "Users Found", nullptr));
         QTableWidgetItem *___qtablewidgetitem5 = tableWidget->horizontalHeaderItem(5);
         ___qtablewidgetitem5->setText(QCoreApplication::translate("MainWindow", "System Uptime", nullptr));
 
@@ -163,6 +165,8 @@ public:
         ___qtablewidgetitem7->setText(QCoreApplication::translate("MainWindow", "gf", nullptr));
         QTableWidgetItem *___qtablewidgetitem8 = tableWidget->item(0, 3);
         ___qtablewidgetitem8->setText(QCoreApplication::translate("MainWindow", "No Domain Found!", nullptr));
+        QTableWidgetItem *___qtablewidgetitem9 = tableWidget->item(0, 4);
+        ___qtablewidgetitem9->setText(QCoreApplication::translate("MainWindow", "N/A", nullptr));
         tableWidget->setSortingEnabled(__sortingEnabled);
 
         tabWidget->setTabText(tabWidget->indexOf(tab), QCoreApplication::translate("MainWindow", "Host", nullptr));

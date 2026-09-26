@@ -6,16 +6,20 @@
 #include <winldap.h>
 #include <winternl.h>
 #include <iostream>
-#include <ldap.h>
+#include <chrono>
 #include <DSRole.h>
-#include <windows.h>
 #include <lmapibuf.h>
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
-
+#include <thread>
 #pragma comment(lib, "User32.lib")
 #pragma comment(lib, "Netapi32.lib")
 using RtlGetVersionCopy = NTSTATUS (*)(PRTL_OSVERSIONINFOW);
+
+std::chrono::milliseconds millisecondsCount(){
+    std::chrono::milliseconds uptime = std::chrono::milliseconds(GetTickCount64());
+    return uptime;
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -93,17 +97,31 @@ MainWindow::MainWindow(QWidget *parent)
 
         QTableWidgetItem* DomainWorkGroup = ui->tableWidget->item(0,3);
 
-        DSROLE_PRIMARY_DOMAIN_INFO_BASIC domainNamestruct;
+        PDSROLE_PRIMARY_DOMAIN_INFO_BASIC domainNamestruct = nullptr;
 
-        DsRoleGetPrimaryDomainInformation(NULL, DsRolePrimaryDomainInfoBasic, (PBYTE*)&domainNamestruct);
+        DWORD res = DsRoleGetPrimaryDomainInformation(
+            nullptr,
+            DsRolePrimaryDomainInfoBasic,
+            reinterpret_cast<PBYTE*>(&domainNamestruct)
+            );
 
-        std::wstring domainName = domainNamestruct.DomainNameDns;
+        if (res == ERROR_SUCCESS && domainNamestruct)
+        {
+            QString domainName =
+                QString::fromWCharArray(domainNamestruct->DomainNameDns);
 
-        if (domainName == L""){
-            DomainWorkGroup->setText("No Domain found!");
-        }else{
-            DomainWorkGroup->setText(QString::fromStdWString(domainName));
+            if (domainName.isEmpty()) {
+                DomainWorkGroup->setText("No Domain found!");
+            } else {
+                DomainWorkGroup->setText(domainName);
+            }
+
+            DsRoleFreeMemory(domainNamestruct);
         }
+
+
+
+
         PDOMAIN_CONTROLLER_INFOW domainInfo = {0};
 
         DWORD res1 = DsGetDcNameW(NULL, NULL, NULL, NULL, DS_DIRECTORY_SERVICE_REQUIRED, &domainInfo);
@@ -125,38 +143,52 @@ MainWindow::MainWindow(QWidget *parent)
             LDAP_AUTH_NEGOTIATE
             );
         if (result != LDAP_SUCCESS) {
-            qDebug() << "LDAP bind failed:"
-                     << ldap_err2stringW(result);
+            qDebug() << "LDAP bind result:" << result;
+            qDebug() << "LDAP error:"
+                     << QString::fromWCharArray(ldap_err2stringW(result));
+            ui->tableWidget->item(0,4)->setText("No Users found! Domain may be down");
         } else {
             qDebug() << "LDAP bind successful";
+            QString domain = QString::fromStdWString(domainInfo->DomainName);
+            QString dc = QString::fromStdWString(domainInfo->DomainControllerName);
+            qDebug() << domain;
+            PWCHAR userAttributes[] = {
+                const_cast<PWCHAR>(L"sAMAccountName"),
+                const_cast<PWCHAR>(L"userPrincipalName"),
+                const_cast<PWCHAR>(L"displayName"),
+                nullptr
+            };
+            LDAPMessage* searchResult = nullptr;
+            QString filter = "(&(objectCategory=person)(objectClass=user))";
+            std::wstring domainW = domain.toStdWString();
+            std::wstring filterW = filter.toStdWString();
+            ULONG result_query = ldap_search_sW(connectLdap, const_cast<PWSTR>(domainW.c_str()), LDAP_SCOPE_SUBTREE, const_cast<PWSTR>(filterW.c_str()), userAttributes, 0, &searchResult);
+
+            int roww = 0;
+            for (LDAPMessage* user = ldap_first_entry(connectLdap, searchResult); user != nullptr; user = ldap_next_entry(connectLdap, user)){
+                PWCHAR attr = const_cast<PWCHAR>(L"sAMAccountName");
+                PWSTR* usernames = ldap_get_valuesW(connectLdap, user, attr);
+                if (usernames && usernames[0]){
+                    ui->tableWidget->item(roww, 4)->setText(QString::fromWCharArray(usernames[0]));
+                    ldap_value_freeW(usernames);
+                }
+                roww++;
+            }
+            if (ui->tableWidget->item(0, 4) == nullptr || ui->tableWidget->item(0, 4)->text().isEmpty()){
+                ui->tableWidget->item(0, 4)->setText("No Users found!");
+            }
+            ldap_msgfree(searchResult);
+            ldap_unbind(connectLdap);
+
         }
-        QString domain = QString::fromStdWString(domainInfo->DomainName);
-        QString dc = QString::fromStdWString(domainInfo->DomainControllerName);
-        qDebug() << domain;
-        PWCHAR userAttributes[] = {
-            const_cast<PWCHAR>(L"sAMAccountName"),
-            const_cast<PWCHAR>(L"userPrincipalName"),
-            const_cast<PWCHAR>(L"displayName"),
-            nullptr
-        };
-        LDAPMessage* searchResult = nullptr;
-       QString filter = "(&(objectCategory=person)(objectClass=user))";
-        std::wstring domainW = domain.toStdWString();
-        std::wstring filterW = filter.toStdWString();
-        ULONG result_query = ldap_search_sW(connectLdap, const_cast<PWSTR>(domainW.c_str()), LDAP_SCOPE_SUBTREE, const_cast<PWSTR>(filterW.c_str()), userAttributes, 0, &searchResult);
-
-        for (LDAPMessage* user = ldap_first_entry(connectLdap, searchResult); user != nullptr; user = ldap_next_entry(connectLdap, user)){
-            //ldap_get_dnW
-            //usernames = ldap_get_valuesW mit const_cast<PWCHAR>(L"sAMAccountName") als letztes
-            //nach jedem mal ldap_value_freeW(usernames);
-            //nach for loop -> ldap_msgfree(searchResult);
-            //  -> ldap_unbind(ldap);
         }
 
+        //System Uptime
 
 
 
-    }
+
+
 
 
 }
