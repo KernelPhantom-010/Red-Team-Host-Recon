@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <lm.h>
+#include <TlHelp32.h>
 #include <dsgetdc.h>
 #include <winldap.h>
 #include <winternl.h>
@@ -11,22 +12,45 @@
 #include <lmapibuf.h>
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include <QTimer>
 #include <thread>
 #pragma comment(lib, "User32.lib")
+#pragma comment(lib, "Kernel32.lib")
 #pragma comment(lib, "Netapi32.lib")
 using RtlGetVersionCopy = NTSTATUS (*)(PRTL_OSVERSIONINFOW);
-
-std::chrono::milliseconds millisecondsCount(){
-    std::chrono::milliseconds uptime = std::chrono::milliseconds(GetTickCount64());
-    return uptime;
-}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    QTimer* timer = new QTimer(this);
 
+    connect(timer, &QTimer::timeout, this, [this]()
+            {
+                quint64 uptimeMs = GetTickCount64();
+                quint64 totalSeconds = uptimeMs / 1000;
+
+                quint64 hours = totalSeconds / 3600;
+                quint64 minutes = (totalSeconds % 3600) / 60;
+                quint64 seconds = totalSeconds % 60;
+
+                QString uptime = QString("%1:%2:%3")
+                                     .arg(hours, 2, 10, QChar('0'))
+                                     .arg(minutes, 2, 10, QChar('0'))
+                                     .arg(seconds, 2, 10, QChar('0'));
+
+                QTableWidgetItem* item = ui->tableWidget->item(0, 5);
+
+                if (!item) {
+                    item = new QTableWidgetItem();
+                    ui->tableWidget->setItem(0, 5, item);
+                }
+
+                item->setText(uptime);
+            });
+
+    timer->start(1000);
 
     int testnum;
     QTableWidgetItem * o = ui->tableWidget->item(0,0);
@@ -183,7 +207,28 @@ MainWindow::MainWindow(QWidget *parent)
         }
         }
 
-        //System Uptime
+        HANDLE snapshotHandle = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+        PROCESSENTRY32  processEntryStruct = {};
+        processEntryStruct.dwSize = sizeof(PROCESSENTRY32);
+        int currentRow = 0;
+        BOOL ret = Process32First(snapshotHandle, &processEntryStruct);
+
+        if (!ret){
+            MessageBoxA(NULL, "Processes couldn't be listed. Try running the tool with administrator privileges.\nIf the problem still remains, open an Issue on my GitHub." ,"Warning", NULL);
+        }
+        else{
+
+                DWORD pid = processEntryStruct.th32ProcessID;
+                std::string pid_conv = std::to_string(pid);
+
+                std::wstring processName_conv = processEntryStruct.szExeFile;
+                ui->tableWidget_2->setItem(currentRow, 0, new QTableWidgetItem(QString::fromStdWString(processName_conv)));
+                ui->tableWidget_2->setItem(currentRow, 1, new QTableWidgetItem(QString::fromStdString(pid_conv)));
+                CloseHandle(snapshotHandle); //das morgen raus! War nur testweise
+                //hier dann direkt auch noch die module auflisten mit seperatem CreateToolhelp32Snapshot. Dann in den Process32Next loop und dort das selbe machen! (Name anzeigen, PID anzeigen und Module)
+
+        }
 
 
 

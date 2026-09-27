@@ -12,6 +12,7 @@ SOURCES += \
     mainwindow.cpp
 
 HEADERS += \
+    build/Worker.h \
     mainwindow.h
 
 FORMS += \

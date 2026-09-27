@@ -31,6 +31,7 @@ public:
     QLabel *label;
     QTableWidget *tableWidget;
     QWidget *tab_2;
+    QTableWidget *tableWidget_2;
     QWidget *tab_3;
     QWidget *tab_4;
     QWidget *tab_5;
@@ -42,7 +43,7 @@ public:
     {
         if (MainWindow->objectName().isEmpty())
             MainWindow->setObjectName("MainWindow");
-        MainWindow->resize(838, 355);
+        MainWindow->resize(838, 425);
         centralwidget = new QWidget(MainWindow);
         centralwidget->setObjectName("centralwidget");
         tabWidget = new QTabWidget(centralwidget);
@@ -97,7 +98,7 @@ public:
         QTableWidgetItem *__qtablewidgetitem16 = new QTableWidgetItem();
         tableWidget->setItem(0, 4, __qtablewidgetitem16);
         tableWidget->setObjectName("tableWidget");
-        tableWidget->setGeometry(QRect(10, 50, 791, 221));
+        tableWidget->setGeometry(QRect(10, 50, 791, 291));
         tableWidget->setFont(font);
         tableWidget->setLineWidth(5);
         tableWidget->setMidLineWidth(0);
@@ -110,6 +111,27 @@ public:
         tabWidget->addTab(tab, QString());
         tab_2 = new QWidget();
         tab_2->setObjectName("tab_2");
+        tableWidget_2 = new QTableWidget(tab_2);
+        if (tableWidget_2->columnCount() < 3)
+            tableWidget_2->setColumnCount(3);
+        QTableWidgetItem *__qtablewidgetitem17 = new QTableWidgetItem();
+        tableWidget_2->setHorizontalHeaderItem(0, __qtablewidgetitem17);
+        QTableWidgetItem *__qtablewidgetitem18 = new QTableWidgetItem();
+        tableWidget_2->setHorizontalHeaderItem(1, __qtablewidgetitem18);
+        QTableWidgetItem *__qtablewidgetitem19 = new QTableWidgetItem();
+        tableWidget_2->setHorizontalHeaderItem(2, __qtablewidgetitem19);
+        if (tableWidget_2->rowCount() < 1)
+            tableWidget_2->setRowCount(1);
+        QTableWidgetItem *__qtablewidgetitem20 = new QTableWidgetItem();
+        tableWidget_2->setItem(0, 0, __qtablewidgetitem20);
+        QTableWidgetItem *__qtablewidgetitem21 = new QTableWidgetItem();
+        tableWidget_2->setItem(0, 1, __qtablewidgetitem21);
+        tableWidget_2->setObjectName("tableWidget_2");
+        tableWidget_2->setGeometry(QRect(0, 0, 821, 351));
+        tableWidget_2->setFont(font);
+        tableWidget_2->setAutoFillBackground(false);
+        tableWidget_2->setEditTriggers(QAbstractItemView::EditTrigger::NoEditTriggers);
+        tableWidget_2->setAlternatingRowColors(false);
         tabWidget->addTab(tab_2, QString());
         tab_3 = new QWidget();
         tab_3->setObjectName("tab_3");
@@ -134,7 +156,7 @@ public:
 
         retranslateUi(MainWindow);
 
-        tabWidget->setCurrentIndex(0);
+        tabWidget->setCurrentIndex(1);
 
 
         QMetaObject::connectSlotsByName(MainWindow);
@@ -170,6 +192,21 @@ public:
         tableWidget->setSortingEnabled(__sortingEnabled);
 
         tabWidget->setTabText(tabWidget->indexOf(tab), QCoreApplication::translate("MainWindow", "Host", nullptr));
+        QTableWidgetItem *___qtablewidgetitem10 = tableWidget_2->horizontalHeaderItem(0);
+        ___qtablewidgetitem10->setText(QCoreApplication::translate("MainWindow", "Process", nullptr));
+        QTableWidgetItem *___qtablewidgetitem11 = tableWidget_2->horizontalHeaderItem(1);
+        ___qtablewidgetitem11->setText(QCoreApplication::translate("MainWindow", "PID", nullptr));
+        QTableWidgetItem *___qtablewidgetitem12 = tableWidget_2->horizontalHeaderItem(2);
+        ___qtablewidgetitem12->setText(QCoreApplication::translate("MainWindow", "Loaded DLL's", nullptr));
+
+        const bool __sortingEnabled1 = tableWidget_2->isSortingEnabled();
+        tableWidget_2->setSortingEnabled(false);
+        QTableWidgetItem *___qtablewidgetitem13 = tableWidget_2->item(0, 0);
+        ___qtablewidgetitem13->setText(QCoreApplication::translate("MainWindow", "0", nullptr));
+        QTableWidgetItem *___qtablewidgetitem14 = tableWidget_2->item(0, 1);
+        ___qtablewidgetitem14->setText(QCoreApplication::translate("MainWindow", "0", nullptr));
+        tableWidget_2->setSortingEnabled(__sortingEnabled1);
+
         tabWidget->setTabText(tabWidget->indexOf(tab_2), QCoreApplication::translate("MainWindow", "Process Discovery", nullptr));
         tabWidget->setTabText(tabWidget->indexOf(tab_3), QCoreApplication::translate("MainWindow", "Token Discovery", nullptr));
         tabWidget->setTabText(tabWidget->indexOf(tab_4), QCoreApplication::translate("MainWindow", "Network Discovery", nullptr));

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>838</width>
-    <height>355</height>
+    <height>425</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -24,7 +24,7 @@
      </rect>
     </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>1</number>
     </property>
     <widget class="QWidget" name="tab">
      <attribute name="title">
@@ -55,7 +55,7 @@
         <x>10</x>
         <y>50</y>
         <width>791</width>
-        <height>221</height>
+        <height>291</height>
        </rect>
       </property>
       <property name="font">
@@ -179,6 +179,57 @@
      <attribute name="title">
       <string>Process Discovery</string>
      </attribute>
+     <widget class="QTableWidget" name="tableWidget_2">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>821</width>
+        <height>351</height>
+       </rect>
+      </property>
+      <property name="font">
+       <font>
+        <family>Consolas</family>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="autoFillBackground">
+       <bool>false</bool>
+      </property>
+      <property name="editTriggers">
+       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+      </property>
+      <property name="alternatingRowColors">
+       <bool>false</bool>
+      </property>
+      <row/>
+      <column>
+       <property name="text">
+        <string>Process</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>PID</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Loaded DLL's</string>
+       </property>
+      </column>
+      <item row="0" column="0">
+       <property name="text">
+        <string>0</string>
+       </property>
+      </item>
+      <item row="0" column="1">
+       <property name="text">
+        <string>0</string>
+       </property>
+      </item>
+     </widget>
     </widget>
     <widget class="QWidget" name="tab_3">
      <attribute name="title">
