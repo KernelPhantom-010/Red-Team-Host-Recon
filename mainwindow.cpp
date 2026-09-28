@@ -225,15 +225,27 @@ MainWindow::MainWindow(QWidget *parent)
                 std::wstring processName_conv = processEntryStruct.szExeFile;
                 ui->tableWidget_2->setItem(currentRow, 0, new QTableWidgetItem(QString::fromStdWString(processName_conv)));
                 ui->tableWidget_2->setItem(currentRow, 1, new QTableWidgetItem(QString::fromStdString(pid_conv)));
-                CloseHandle(snapshotHandle); //das morgen raus! War nur testweise
+
                 //hier dann direkt auch noch die module auflisten mit seperatem CreateToolhelp32Snapshot. Dann in den Process32Next loop und dort das selbe machen! (Name anzeigen, PID anzeigen und Module)
+                HANDLE moduleHandle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0);
+                if (moduleHandle == INVALID_HANDLE_VALUE){
+                    MessageBoxA(NULL, "DLL's couldn't be listed. Try running the tool with administrator privileges.\nIf the problem still remains, open an Issue on my GitHub." ,"Warning", NULL);
+                }else{
+                    MODULEENTRY32 modules = {0};
+                    modules.dwSize = sizeof(MODULEENTRY32);
+                    BOOL ret_mod1 = Module32First(moduleHandle, &modules);
+                    if (ret_mod1){
+                        std::wstring firstModule = modules.szModule;
+                        ui->tableWidget->setItem(currentRow, 3, new QTableWidgetItem(QString::fromStdWString(firstModule)));
+                    //hier muss morgen ein loop her! Der für die anderen Processe.
+                }
 
         }
 
 
 
 
-
+        }
 
 
 }
