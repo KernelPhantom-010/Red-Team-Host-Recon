@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Red Teaming Host Recon</string>
+   <string>Blue Bear</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <widget class="QTabWidget" name="tabWidget">
@@ -24,7 +24,7 @@
      </rect>
     </property>
     <property name="currentIndex">
-     <number>1</number>
+     <number>2</number>
     </property>
     <widget class="QWidget" name="tab">
      <attribute name="title">
@@ -179,34 +179,21 @@
      <attribute name="title">
       <string>Process Discovery</string>
      </attribute>
-     <widget class="QTableWidget" name="tableWidget_2">
+     <widget class="QTreeWidget" name="tableWidget_2">
       <property name="geometry">
        <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>821</width>
-        <height>351</height>
+        <x>10</x>
+        <y>10</y>
+        <width>801</width>
+        <height>341</height>
        </rect>
       </property>
-      <property name="font">
-       <font>
-        <family>Consolas</family>
-        <bold>true</bold>
-       </font>
+      <property name="columnCount">
+       <number>3</number>
       </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="editTriggers">
-       <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
-      </property>
-      <property name="alternatingRowColors">
-       <bool>false</bool>
-      </property>
-      <row/>
       <column>
        <property name="text">
-        <string>Process</string>
+        <string>Process </string>
        </property>
       </column>
       <column>
@@ -216,25 +203,55 @@
       </column>
       <column>
        <property name="text">
-        <string>Loaded DLL's</string>
+        <string>Modules/DLL's</string>
        </property>
       </column>
-      <item row="0" column="0">
-       <property name="text">
-        <string>0</string>
-       </property>
-      </item>
-      <item row="0" column="1">
-       <property name="text">
-        <string>0</string>
-       </property>
-      </item>
      </widget>
     </widget>
     <widget class="QWidget" name="tab_3">
      <attribute name="title">
       <string>Token Discovery</string>
      </attribute>
+     <widget class="QTreeWidget" name="treeWidget">
+      <property name="geometry">
+       <rect>
+        <x>10</x>
+        <y>10</y>
+        <width>811</width>
+        <height>341</height>
+       </rect>
+      </property>
+      <column>
+       <property name="text">
+        <string notr="true">Process</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>PID</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>SeImpersonatePrivilege?</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>SeDebugPrivilege?</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Token-Owner</string>
+       </property>
+      </column>
+      <column>
+       <property name="text">
+        <string>Integrity Level</string>
+       </property>
+      </column>
+     </widget>
     </widget>
     <widget class="QWidget" name="tab_4">
      <attribute name="title">

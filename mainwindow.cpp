@@ -17,13 +17,43 @@
 #pragma comment(lib, "User32.lib")
 #pragma comment(lib, "Kernel32.lib")
 #pragma comment(lib, "Netapi32.lib")
+#pragma comment(lib, "Advapi32.lib")
+#pragma comment(lib, "Wldap32.lib")
 using RtlGetVersionCopy = NTSTATUS (*)(PRTL_OSVERSIONINFOW);
+
+static void EnableDebugPrivilege()
+{
+    HANDLE token = NULL;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &token)) {
+        return;
+    }
+    TOKEN_PRIVILEGES tp = {};
+    tp.PrivilegeCount = 1;
+    tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    if (LookupPrivilegeValueW(NULL, SE_DEBUG_NAME, &tp.Privileges[0].Luid)) {
+        AdjustTokenPrivileges(token, FALSE, &tp, sizeof(tp), NULL, NULL);
+    }
+    CloseHandle(token);
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    ui->tableWidget_2->setColumnCount(3);
+    ui->tableWidget_2->setColumnWidth(0, 200);
+    ui->tableWidget_2->setColumnWidth(1, 80);
+    QTreeWidget* tw = ui->treeWidget;
+
+    tw->setColumnWidth(0, 180); // Process
+    tw->setColumnWidth(1, 60);  // PID
+    tw->setColumnWidth(2, 160); // SeImpersonatePrivilege?
+    tw->setColumnWidth(3, 140); // SeDebugPrivilege?
+    tw->setColumnWidth(4, 180); // Token-Owner
+    tw->setColumnWidth(5, 110); // Integrity Levell
+    tw->header()->setStretchLastSection(true);
+
     QTimer* timer = new QTimer(this);
 
     connect(timer, &QTimer::timeout, this, [this]()
@@ -51,6 +81,8 @@ MainWindow::MainWindow(QWidget *parent)
             });
 
     timer->start(1000);
+
+    EnableDebugPrivilege();
 
     int testnum;
     QTableWidgetItem * o = ui->tableWidget->item(0,0);
@@ -113,9 +145,13 @@ MainWindow::MainWindow(QWidget *parent)
             if (arch != NULL){
                 arch->setText("x64");
             }
-        }else if (sysInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64){
+        }else if (sysInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL){
             if (arch != NULL){
                 arch->setText("x32");
+            }
+        }else if (sysInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64){
+            if (arch != NULL){
+                arch->setText("ARM64");
             }
         }
 
@@ -135,117 +171,219 @@ MainWindow::MainWindow(QWidget *parent)
                 QString::fromWCharArray(domainNamestruct->DomainNameDns);
 
             if (domainName.isEmpty()) {
-                DomainWorkGroup->setText("No Domain found!");
+                if (DomainWorkGroup) DomainWorkGroup->setText("No Domain found!");
             } else {
-                DomainWorkGroup->setText(domainName);
+                if (DomainWorkGroup) DomainWorkGroup->setText(domainName);
             }
 
             DsRoleFreeMemory(domainNamestruct);
         }
+        else if (DomainWorkGroup) {
+            DomainWorkGroup->setText("No Domain found!");
+        }
 
-
-
-
-        PDOMAIN_CONTROLLER_INFOW domainInfo = {0};
+        PDOMAIN_CONTROLLER_INFOW domainInfo = nullptr;
 
         DWORD res1 = DsGetDcNameW(NULL, NULL, NULL, NULL, DS_DIRECTORY_SERVICE_REQUIRED, &domainInfo);
 
-        if (res1 == ERROR_SUCCESS){
+        bool haveDomainInfo = (res1 == ERROR_SUCCESS && domainInfo != nullptr);
+
+        if (haveDomainInfo){
             wprintf(L"DC: %s\n", domainInfo->DomainControllerName);
             wprintf(L"Domain: %s\n", domainInfo->DomainName);
-
-
         }
 
-        LDAP* connectLdap = ldap_initW(NULL, LDAP_PORT);
-        ULONG version = LDAP_VERSION3;
-        ldap_set_optionW(connectLdap, LDAP_OPT_PROTOCOL_VERSION, &version);
-        ULONG result = ldap_bind_sW(
-            connectLdap,
-            nullptr,
-            nullptr,
-            LDAP_AUTH_NEGOTIATE
+        // LDAP nur versuchen, wenn wir überhaupt eine Domain haben
+        if (haveDomainInfo){
+
+            LDAP* connectLdap = ldap_initW(NULL, LDAP_PORT);
+
+            if (!connectLdap){
+                if (ui->tableWidget->item(0,4)) ui->tableWidget->item(0,4)->setText("LDAP init failed");
+            }
+            else{
+                ULONG version = LDAP_VERSION3;
+                ldap_set_optionW(connectLdap, LDAP_OPT_PROTOCOL_VERSION, &version);
+                ULONG result = ldap_bind_sW(
+                    connectLdap,
+                    nullptr,
+                    nullptr,
+                    LDAP_AUTH_NEGOTIATE
+                    );
+                if (result != LDAP_SUCCESS) {
+                    qDebug() << "LDAP bind result:" << result;
+                    qDebug() << "LDAP error:"
+                             << QString::fromWCharArray(ldap_err2stringW(result));
+                    if (ui->tableWidget->item(0,4)) ui->tableWidget->item(0,4)->setText("No Users found! Domain may be down");
+                    ldap_unbind(connectLdap);
+                } else {
+                    qDebug() << "LDAP bind successful";
+                    QString domain = QString::fromWCharArray(domainInfo->DomainName);
+                    QString dc = QString::fromWCharArray(domainInfo->DomainControllerName);
+                    qDebug() << domain;
+
+                    // DN aus Domainnamen bauen, z.B. corp.local -> DC=corp,DC=local
+                    QStringList parts = domain.split('.', Qt::SkipEmptyParts);
+                    QStringList dcParts;
+                    for (const QString& part : parts) {
+                        dcParts << ("DC=" + part);
+                    }
+                    QString baseDn = dcParts.join(",");
+
+                    PWCHAR userAttributes[] = {
+                        const_cast<PWCHAR>(L"sAMAccountName"),
+                        const_cast<PWCHAR>(L"userPrincipalName"),
+                        const_cast<PWCHAR>(L"displayName"),
+                        nullptr
+                    };
+                    LDAPMessage* searchResult = nullptr;
+                    QString filter = "(&(objectCategory=person)(objectClass=user))";
+                    std::wstring baseDnW = baseDn.toStdWString();
+                    std::wstring filterW = filter.toStdWString();
+                    ULONG result_query = ldap_search_sW(connectLdap, const_cast<PWSTR>(baseDnW.c_str()), LDAP_SCOPE_SUBTREE, const_cast<PWSTR>(filterW.c_str()), userAttributes, 0, &searchResult);
+
+                    if (result_query != LDAP_SUCCESS){
+                        qDebug() << "LDAP search failed:" << QString::fromWCharArray(ldap_err2stringW(result_query));
+                        if (ui->tableWidget->item(0,4)) ui->tableWidget->item(0,4)->setText("LDAP search failed");
+                    }
+                    else{
+                        int roww = 0;
+                        for (LDAPMessage* user = ldap_first_entry(connectLdap, searchResult); user != nullptr; user = ldap_next_entry(connectLdap, user)){
+                            PWCHAR attr = const_cast<PWCHAR>(L"sAMAccountName");
+                            PWSTR* usernames = ldap_get_valuesW(connectLdap, user, attr);
+                            if (usernames && usernames[0]){
+                                QTableWidgetItem* userItem = ui->tableWidget->item(roww, 4);
+                                if (!userItem){
+                                    userItem = new QTableWidgetItem();
+                                    ui->tableWidget->setItem(roww, 4, userItem);
+                                }
+                                userItem->setText(QString::fromWCharArray(usernames[0]));
+                                ldap_value_freeW(usernames);
+                            }
+                            roww++;
+                        }
+                        if (roww == 0 && ui->tableWidget->item(0, 4)){
+                            ui->tableWidget->item(0, 4)->setText("No Users found!");
+                        }
+                        if (searchResult) ldap_msgfree(searchResult);
+                    }
+                    ldap_unbind(connectLdap);
+                }
+            }
+        }
+        else if (ui->tableWidget->item(0,4)) {
+            ui->tableWidget->item(0,4)->setText("No Domain found!");
+        }
+
+        if (domainInfo){
+            NetApiBufferFree(domainInfo);
+        }
+
+        FreeLibrary(dllHandle);
+    }
+
+    HANDLE snapshotHandle = CreateToolhelp32Snapshot(
+        TH32CS_SNAPPROCESS,
+        0
+        );
+
+    if (snapshotHandle == INVALID_HANDLE_VALUE){
+        MessageBoxA(
+            NULL,
+            "Processes couldn't be listed. Try running the tool with administrator privileges.\n"
+            "If the problem still remains, open an Issue on my GitHub.",
+            "Warning",
+            NULL
             );
-        if (result != LDAP_SUCCESS) {
-            qDebug() << "LDAP bind result:" << result;
-            qDebug() << "LDAP error:"
-                     << QString::fromWCharArray(ldap_err2stringW(result));
-            ui->tableWidget->item(0,4)->setText("No Users found! Domain may be down");
-        } else {
-            qDebug() << "LDAP bind successful";
-            QString domain = QString::fromStdWString(domainInfo->DomainName);
-            QString dc = QString::fromStdWString(domainInfo->DomainControllerName);
-            qDebug() << domain;
-            PWCHAR userAttributes[] = {
-                const_cast<PWCHAR>(L"sAMAccountName"),
-                const_cast<PWCHAR>(L"userPrincipalName"),
-                const_cast<PWCHAR>(L"displayName"),
-                nullptr
-            };
-            LDAPMessage* searchResult = nullptr;
-            QString filter = "(&(objectCategory=person)(objectClass=user))";
-            std::wstring domainW = domain.toStdWString();
-            std::wstring filterW = filter.toStdWString();
-            ULONG result_query = ldap_search_sW(connectLdap, const_cast<PWSTR>(domainW.c_str()), LDAP_SCOPE_SUBTREE, const_cast<PWSTR>(filterW.c_str()), userAttributes, 0, &searchResult);
+        return;
+    }
 
-            int roww = 0;
-            for (LDAPMessage* user = ldap_first_entry(connectLdap, searchResult); user != nullptr; user = ldap_next_entry(connectLdap, user)){
-                PWCHAR attr = const_cast<PWCHAR>(L"sAMAccountName");
-                PWSTR* usernames = ldap_get_valuesW(connectLdap, user, attr);
-                if (usernames && usernames[0]){
-                    ui->tableWidget->item(roww, 4)->setText(QString::fromWCharArray(usernames[0]));
-                    ldap_value_freeW(usernames);
-                }
-                roww++;
+    PROCESSENTRY32W processEntryStruct = {};
+    processEntryStruct.dwSize = sizeof(PROCESSENTRY32W);
+
+    int currentRow = 0;
+
+    BOOL ret = Process32FirstW(snapshotHandle, &processEntryStruct);
+
+    if (!ret) {
+        MessageBoxA(
+            NULL,
+            "Processes couldn't be listed. Try running the tool with administrator privileges.\n"
+            "If the problem still remains, open an Issue on my GitHub.",
+            "Warning",
+            NULL
+            );
+    }
+    else {
+
+        do {
+
+            DWORD pid = processEntryStruct.th32ProcessID;
+
+            std::string pid_conv = std::to_string(pid);
+            std::wstring processName_conv = processEntryStruct.szExeFile;
+
+            QTreeWidgetItem* processItem = new QTreeWidgetItem(ui->tableWidget_2);
+            processItem->setText(0, QString::fromStdWString(processName_conv));
+            processItem->setText(1, QString::fromStdString(pid_conv));
+
+            if (pid == 0){
+                processItem->setText(2, "-");
             }
-            if (ui->tableWidget->item(0, 4) == nullptr || ui->tableWidget->item(0, 4)->text().isEmpty()){
-                ui->tableWidget->item(0, 4)->setText("No Users found!");
-            }
-            ldap_msgfree(searchResult);
-            ldap_unbind(connectLdap);
+            else{
+                HANDLE moduleHandle = CreateToolhelp32Snapshot(
+                    TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32,
+                    pid
+                    );
 
-        }
-        }
+                if (moduleHandle != INVALID_HANDLE_VALUE) {
 
-        HANDLE snapshotHandle = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                    MODULEENTRY32W modules = {};
+                    modules.dwSize = sizeof(MODULEENTRY32W);
 
-        PROCESSENTRY32  processEntryStruct = {};
-        processEntryStruct.dwSize = sizeof(PROCESSENTRY32);
-        int currentRow = 0;
-        BOOL ret = Process32First(snapshotHandle, &processEntryStruct);
+                    int dllCount = 0;
 
-        if (!ret){
-            MessageBoxA(NULL, "Processes couldn't be listed. Try running the tool with administrator privileges.\nIf the problem still remains, open an Issue on my GitHub." ,"Warning", NULL);
-        }
-        else{
+                    BOOL ret_mod1 = Module32FirstW(
+                        moduleHandle,
+                        &modules
+                        );
 
-                DWORD pid = processEntryStruct.th32ProcessID;
-                std::string pid_conv = std::to_string(pid);
+                    if (ret_mod1) {
 
-                std::wstring processName_conv = processEntryStruct.szExeFile;
-                ui->tableWidget_2->setItem(currentRow, 0, new QTableWidgetItem(QString::fromStdWString(processName_conv)));
-                ui->tableWidget_2->setItem(currentRow, 1, new QTableWidgetItem(QString::fromStdString(pid_conv)));
+                        do {
+                            QTreeWidgetItem* dllChild = new QTreeWidgetItem(processItem);
+                            dllChild->setText(2, QString::fromWCharArray(modules.szModule));
+                            dllCount++;
 
-                //hier dann direkt auch noch die module auflisten mit seperatem CreateToolhelp32Snapshot. Dann in den Process32Next loop und dort das selbe machen! (Name anzeigen, PID anzeigen und Module)
-                HANDLE moduleHandle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, 0);
-                if (moduleHandle == INVALID_HANDLE_VALUE){
-                    MessageBoxA(NULL, "DLL's couldn't be listed. Try running the tool with administrator privileges.\nIf the problem still remains, open an Issue on my GitHub." ,"Warning", NULL);
-                }else{
-                    MODULEENTRY32 modules = {0};
-                    modules.dwSize = sizeof(MODULEENTRY32);
-                    BOOL ret_mod1 = Module32First(moduleHandle, &modules);
-                    if (ret_mod1){
-                        std::wstring firstModule = modules.szModule;
-                        ui->tableWidget->setItem(currentRow, 3, new QTableWidgetItem(QString::fromStdWString(firstModule)));
-                    //hier muss morgen ein loop her! Der für die anderen Processe.
+                        } while (Module32NextW(
+                            moduleHandle,
+                            &modules
+                            ));
+                    }
+
+                    processItem->setText(2, QString("%1 DLL's (click to expand)").arg(dllCount));
+
+                    CloseHandle(moduleHandle);
                 }
+                else{
+                    DWORD err = GetLastError();
+                    processItem->setText(2,
+                                         err == ERROR_ACCESS_DENIED ? "Access denied (protected?)" : QString("Error %1").arg(err)
+                                         );
+                }
+            }
 
-        }
+        } while (Process32NextW(
+            snapshotHandle,
+            &processEntryStruct
+            ));
+    }
 
+    CloseHandle(snapshotHandle);
 
-
-
-        }
+    for (int i = 0; i < ui->tableWidget_2->columnCount(); i++){
+        ui->tableWidget_2->resizeColumnToContents(i);
+    }
 
 
 }

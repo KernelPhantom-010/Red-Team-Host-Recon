@@ -1,38 +1,113 @@
-# Red Team Host Recon
+<p align="center">
+  <img src="images/logo.png" alt="Blue Bear Logo" width="140"/>
+</p>
 
-A lightweight C++ (Qt) host reconnaissance tool for red team engagements. It presents a dashboard of key host and network information to speed up initial recon during assessments, with more enumeration features planned for future releases.
+# Blue Bear — Red Teaming Host Recon Tool
 
-> 🚧 **Status:** Under development since **September 23, 2026**.
+A Windows-based reconnaissance tool for red team operations and security assessments. Blue Bear provides a structured dashboard for enumerating host information, running processes, loaded modules, tokens, and more — all from a single GUI.
 
-## Features (current)
+> ⚠️ **For authorized security testing and educational purposes only. Do not use on systems you do not own or have explicit written permission to test! The author is not responsible for any misuse, but this warning should make clear to people, that this Project is only focused on ethical penetration testing/recon. ITS STILL UNDER DEVELOPMENT!**
 
-- Computer name detection
-- OS version & build number (Windows 10 / 11)
-- CPU architecture detection
-- Domain / workgroup detection
-- Domain controller (DC) lookup
-- LDAP-based Active Directory user enumeration *(in progress)*
+---
 
-## Planned
+## Features
 
-- Additional host & network enumeration features (see project roadmap)
+### 🖥️ Host
+Displays general system information about the target host:
+- **Computer Name**
+- **OS Version** — Windows 10/11 with exact build number (via `RtlGetVersion`)
+- **Architecture** — x64, x86, ARM64
+- **Domain / Workgroup** — retrieved via `DsRoleGetPrimaryDomainInformation`
+- **Domain Users** — enumerated via LDAP with `ldap_search_sW` (requires domain connectivity)
+- **System Uptime** — live ticker (HH:MM:SS)
 
-## Tech Stack
+---
 
-- C++
-- Qt (Widgets)
-- Windows APIs: NetAPI32, DSRole, LDAP (Wldap32), NTDLL
+### 🔍 Process Discovery
+Enumerates all running processes on the system:
+- Process name and PID
+- All loaded DLLs per process via `CreateToolhelp32Snapshot` (expandable tree)
+- Graceful handling of protected processes (`Access denied`)
+- Requires **administrator privileges** for full module enumeration
+- Uses `SeDebugPrivilege` escalation automatically if available
+
+---
+
+### 🪙 Token Discovery *(in development)*
+Planned enumeration of security tokens across all running processes:
+- **SeImpersonatePrivilege** — identifies processes vulnerable to token impersonation attacks (Potato-style privesc)
+- **SeDebugPrivilege** — identifies processes capable of attaching to arbitrary processes (e.g. lsass)
+- **Token Owner** — resolves the user account behind each token
+- **Integrity Level** — Low / Medium / High / System
+- **Elevated** — whether the token is a full admin token or a filtered one
+
+---
+
+### 🌐 Network Discovery *(planned)*
+
+---
+
+### ⚙️ Service Discovery *(planned)*
+
+---
+
+### 📌 Persistence *(planned)*
+
+---
+
+## Requirements
+
+- Windows 10 / Windows 11
+- **Administrator privileges** (required for full process and token enumeration)
+- MSVC 2022 runtime
+- Qt 6.x runtime (bundled via `windeployqt`)
+
+---
 
 ## Build
 
-- Windows only
-- Qt (with MSVC toolchain) required
-- Open the project in Qt Creator (or configure via CMake/qmake) and build
+Requires Qt 6 with MSVC2022 64-bit and CMake or qmake.
 
-## License
+**CMake:**
+```
+mkdir build
+cd build
+cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:\Qt\6.x.x\msvc2022_64"
+cmake --build .
+```
 
-This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
+**qmake:**
+```
+mkdir build
+cd build
+qmake ..\BlueBear.pro -spec win32-msvc "CONFIG+=release"
+nmake
+```
+
+After building, run `windeployqt` to bundle the Qt DLLs:
+```
+windeployqt BlueBear.exe
+```
+
+---
+
+## Libraries / APIs used
+
+- `Windows.h`, `TlHelp32.h` — process and module enumeration
+- `Winldap.h` / `Wldap32.lib` — LDAP domain user enumeration
+- `DSRole.h`, `DsGetDcName` — domain role and DC discovery
+- `Ntdll.dll` / `RtlGetVersion` — accurate OS version detection
+- `Advapi32.lib` — token and privilege APIs
+- Qt 6 — GUI framework (QMainWindow, QTreeWidget, QTimer)
+
+---
 
 ## Disclaimer
 
-This tool is intended for use in **authorized** red team engagements and security testing only. Use it only against systems you own or have explicit permission to test.
+Blue Bear is intended strictly for use in authorized penetration tests, CTF environments, and security research. The author assumes no liability for misuse. Always obtain written permission before running this tool against any system.
+
+---
+
+## Author
+
+**KernelPhantom-010**
