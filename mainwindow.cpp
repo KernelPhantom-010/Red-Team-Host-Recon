@@ -8,6 +8,8 @@
 #include <winternl.h>
 #include <iostream>
 #include <chrono>
+#include <locale.h>
+#include <codecvt>
 #include <DSRole.h>
 #include <lmapibuf.h>
 #include "mainwindow.h"
@@ -281,7 +283,7 @@ MainWindow::MainWindow(QWidget *parent)
 
         FreeLibrary(dllHandle);
     }
-
+    std::vector<std::string> processNames;
     HANDLE snapshotHandle = CreateToolhelp32Snapshot(
         TH32CS_SNAPPROCESS,
         0
@@ -304,7 +306,7 @@ MainWindow::MainWindow(QWidget *parent)
     int currentRow = 0;
 
     BOOL ret = Process32FirstW(snapshotHandle, &processEntryStruct);
-
+    std::vector<DWORD> pids;
     if (!ret) {
         MessageBoxA(
             NULL,
@@ -323,6 +325,13 @@ MainWindow::MainWindow(QWidget *parent)
             std::string pid_conv = std::to_string(pid);
             std::wstring processName_conv = processEntryStruct.szExeFile;
 
+            using convert_type = std::codecvt_utf8<wchar_t>;
+
+            std::wstring_convert<convert_type, wchar_t> converter;
+            std::string processNameFullStdString = converter.to_bytes(processEntryStruct.szExeFile);
+
+            processNames.push_back(processNameFullStdString);
+            pids.push_back(pid);
             QTreeWidgetItem* processItem = new QTreeWidgetItem(ui->tableWidget_2);
             processItem->setText(0, QString::fromStdWString(processName_conv));
             processItem->setText(1, QString::fromStdString(pid_conv));
@@ -384,6 +393,66 @@ MainWindow::MainWindow(QWidget *parent)
     for (int i = 0; i < ui->tableWidget_2->columnCount(); i++){
         ui->tableWidget_2->resizeColumnToContents(i);
     }
+
+
+    //Tokenizing
+
+    for (int x = 0; x < processNames.size(); x++){
+        QTreeWidgetItem* item = new QTreeWidgetItem(ui->treeWidget);
+        item->setText(0, QString::fromStdString(processNames[x]));
+        item->setText(1, QString::fromStdString(std::to_string(pids[x])));
+    }
+
+
+
+
+    for (int i = 0; i < pids.size(); i++){
+        HANDLE procH = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pids[i]);
+
+
+        DWORD retLength = 0;
+
+        if (procH == INVALID_HANDLE_VALUE){
+            continue;
+        }
+
+        HANDLE *tokenHandle;
+
+        OpenProcessToken(procH, PROCESS_ALL_ACCESS, tokenHandle);
+
+
+        retLength = 0;
+        GetTokenInformation(tokenHandle, TokenPrivileges, nullptr, 0, &retLength);
+        std::vector<BYTE> privBuf(retLength);
+        TOKEN_PRIVILEGES* privStruct = reinterpret_cast<TOKEN_PRIVILEGES*>(privBuf.data());
+        BOOL ret1 = GetTokenInformation(tokenHandle, TokenPrivileges, privStruct, retLength, &retLength);
+
+
+        retLength = 0;
+        GetTokenInformation(tokenHandle, TokenUser, nullptr, 0, &retLength);
+        std::vector<BYTE> userBuf(retLength);
+        TOKEN_USER* userStruct = reinterpret_cast<TOKEN_USER*>(userBuf.data());
+        BOOL ret2 = GetTokenInformation(tokenHandle, TokenUser, userStruct, retLength, &retLength);
+
+
+        retLength = 0;
+        GetTokenInformation(tokenHandle, TokenIntegrityLevel, nullptr, 0, &retLength);
+        std::vector<BYTE> intBuf(retLength);
+        TOKEN_MANDATORY_LABEL* integrityStruct = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(intBuf.data());
+        BOOL ret3 = GetTokenInformation(tokenHandle, TokenIntegrityLevel, integrityStruct, retLength, &retLength);
+
+
+        TOKEN_ELEVATION elevStruct = {0};
+        DWORD elevLen = sizeof(TOKEN_ELEVATION);
+        BOOL ret4 = GetTokenInformation(tokenHandle, TokenElevation, &elevStruct, elevLen, &elevLen);
+
+
+
+
+    }
+
+
+
 
 
 }
