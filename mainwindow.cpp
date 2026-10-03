@@ -1,5 +1,5 @@
 #define WIN32_LEAN_AND_MEAN
-
+#include <winsock2.h>
 #include <windows.h>
 #include <lm.h>
 #include <TlHelp32.h>
@@ -13,6 +13,7 @@
 #include <DSRole.h>
 #include <lmapibuf.h>
 #include "mainwindow.h"
+#include <iphlpapi.h>
 #include "ui_mainwindow.h"
 #include <QTimer>
 #include <thread>
@@ -21,6 +22,7 @@
 #pragma comment(lib, "Netapi32.lib")
 #pragma comment(lib, "Advapi32.lib")
 #pragma comment(lib, "Wldap32.lib")
+#pragma comment(lib, "Iphlpapi.lib")
 using RtlGetVersionCopy = NTSTATUS (*)(PRTL_OSVERSIONINFOW);
 
 static void EnableDebugPrivilege()
@@ -394,17 +396,14 @@ MainWindow::MainWindow(QWidget *parent)
         ui->tableWidget_2->resizeColumnToContents(i);
     }
 
+    DWORD size = 0;
+    GetExtendedTcpTable(nullptr, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
+    std::vector<BYTE> buf(size);
+    MIB_TCPTABLE_OWNER_PID* pTcpTable = reinterpret_cast<MIB_TCPTABLE_OWNER_PID*>(buf.data());
+    DWORD ret5 = GetExtendedTcpTable(pTcpTable, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
 
-    //Tokenizing
-
-    for (int x = 0; x < processNames.size(); x++){
-        QTreeWidgetItem* item = new QTreeWidgetItem(ui->treeWidget);
-        item->setText(0, QString::fromStdString(processNames[x]));
-        item->setText(1, QString::fromStdString(std::to_string(pids[x])));
-    }
-
-
-
+    //morgen:
+    //For schleife über pTcpTable->dwNumEntries
 
     for (int i = 0; i < pids.size(); i++){
         HANDLE procH = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pids[i]);
@@ -412,39 +411,109 @@ MainWindow::MainWindow(QWidget *parent)
 
         DWORD retLength = 0;
 
-        if (procH == INVALID_HANDLE_VALUE){
+        if (procH == NULL){
             continue;
         }
 
-        HANDLE *tokenHandle;
+        HANDLE tokenHandle;
 
-        OpenProcessToken(procH, PROCESS_ALL_ACCESS, tokenHandle);
+        OpenProcessToken(procH, TOKEN_QUERY, &tokenHandle);
 
+        if (tokenHandle != INVALID_HANDLE_VALUE){
+            retLength = 0;
+            GetTokenInformation(tokenHandle, TokenPrivileges, nullptr, 0, &retLength);
+            std::vector<BYTE> privBuf(retLength);
+            TOKEN_PRIVILEGES* privStruct = reinterpret_cast<TOKEN_PRIVILEGES*>(privBuf.data());
+            BOOL ret1 = GetTokenInformation(tokenHandle, TokenPrivileges, privStruct, retLength, &retLength);
+            //SET :)
 
-        retLength = 0;
-        GetTokenInformation(tokenHandle, TokenPrivileges, nullptr, 0, &retLength);
-        std::vector<BYTE> privBuf(retLength);
-        TOKEN_PRIVILEGES* privStruct = reinterpret_cast<TOKEN_PRIVILEGES*>(privBuf.data());
-        BOOL ret1 = GetTokenInformation(tokenHandle, TokenPrivileges, privStruct, retLength, &retLength);
-
-
-        retLength = 0;
-        GetTokenInformation(tokenHandle, TokenUser, nullptr, 0, &retLength);
-        std::vector<BYTE> userBuf(retLength);
-        TOKEN_USER* userStruct = reinterpret_cast<TOKEN_USER*>(userBuf.data());
-        BOOL ret2 = GetTokenInformation(tokenHandle, TokenUser, userStruct, retLength, &retLength);
-
-
-        retLength = 0;
-        GetTokenInformation(tokenHandle, TokenIntegrityLevel, nullptr, 0, &retLength);
-        std::vector<BYTE> intBuf(retLength);
-        TOKEN_MANDATORY_LABEL* integrityStruct = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(intBuf.data());
-        BOOL ret3 = GetTokenInformation(tokenHandle, TokenIntegrityLevel, integrityStruct, retLength, &retLength);
+            retLength = 0;
+            GetTokenInformation(tokenHandle, TokenUser, nullptr, 0, &retLength);
+            std::vector<BYTE> userBuf(retLength);
+            TOKEN_USER* userStruct = reinterpret_cast<TOKEN_USER*>(userBuf.data());
+            BOOL ret2 = GetTokenInformation(tokenHandle, TokenUser, userStruct, retLength, &retLength);
 
 
-        TOKEN_ELEVATION elevStruct = {0};
-        DWORD elevLen = sizeof(TOKEN_ELEVATION);
-        BOOL ret4 = GetTokenInformation(tokenHandle, TokenElevation, &elevStruct, elevLen, &elevLen);
+            retLength = 0;
+            GetTokenInformation(tokenHandle, TokenIntegrityLevel, nullptr, 0, &retLength);
+            std::vector<BYTE> intBuf(retLength);
+            TOKEN_MANDATORY_LABEL* integrityStruct = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(intBuf.data());
+            BOOL ret3 = GetTokenInformation(tokenHandle, TokenIntegrityLevel, integrityStruct, retLength, &retLength);
+
+
+            TOKEN_ELEVATION elevStruct = {0};
+            DWORD elevLen = sizeof(TOKEN_ELEVATION);
+            BOOL ret4 = GetTokenInformation(tokenHandle, TokenElevation, &elevStruct, elevLen, &elevLen);
+
+            LUID luidImpersonate = {0};
+            LUID luidDebug = {0};
+            LookupPrivilegeValueW(NULL, SE_IMPERSONATE_NAME, &luidImpersonate);
+            LookupPrivilegeValueW(NULL, SE_DEBUG_NAME, &luidDebug);
+            bool hasImpersonate = false;
+            bool hasDebug = false;
+            for (DWORD j = 0; j < privStruct->PrivilegeCount; ++j){
+
+                LUID localLuid = privStruct->Privileges[j].Luid;
+                DWORD attr = privStruct->Privileges[j].Attributes;
+
+                if (localLuid.LowPart == luidImpersonate.LowPart && localLuid.HighPart == luidImpersonate.HighPart){
+                    hasImpersonate = (attr & SE_PRIVILEGE_ENABLED) != 0;
+                }
+                if (localLuid.LowPart == luidDebug.LowPart && localLuid.HighPart == luidDebug.HighPart){
+                    hasDebug = (attr & SE_PRIVILEGE_ENABLED) != 0;
+                }
+            }
+
+            char szName[256] = {0};
+            char szDomain[256] = {0};
+            DWORD cchName = 256, cchDomain = 256;
+            SID_NAME_USE snu;
+            char fullOwner[6000];
+
+            if (LookupAccountSidA(NULL, userStruct->User.Sid, szName, &cchName, szDomain, &cchDomain, &snu)){
+                snprintf(fullOwner, sizeof(fullOwner), "%s/%s", szName, szDomain);
+            }
+
+            std::string fullOwnerStdStr = fullOwner;
+
+            QString hasImpersonateInsert = "FALSE";
+            QString hasDebugInsert = "FALSE";
+
+            if (hasImpersonate){
+                hasImpersonateInsert = "TRUE";
+            }
+            if (hasDebug){
+                hasDebugInsert = "TRUE";
+            }
+            QString integrityLevel = "Unknown";
+            if (ret3){
+                DWORD level = *GetSidSubAuthority(integrityStruct->Label.Sid, *GetSidSubAuthorityCount(integrityStruct->Label.Sid) - 1);
+                if      (level < SECURITY_MANDATORY_MEDIUM_RID) integrityLevel = "Low";
+                else if (level < SECURITY_MANDATORY_HIGH_RID)   integrityLevel = "Medium";
+                else if (level < SECURITY_MANDATORY_SYSTEM_RID) integrityLevel = "High";
+                else                                             integrityLevel = "System";
+            }
+            QTreeWidgetItem* item = new QTreeWidgetItem(ui->treeWidget);
+            item->setText(0, QString::fromStdString(processNames[i]));
+            QTreeWidgetItem* item2 = new QTreeWidgetItem(ui->treeWidget_2);
+            item2->setText(5, QString::fromStdString(processNames[i]));
+            item2->setText(6, QString::fromStdString(std::to_string(pids[i])));
+            item->setText(1, QString::fromStdString(std::to_string(pids[i])));
+            item->setText(2, hasImpersonateInsert);
+            item->setText(3, hasDebugInsert);
+            item->setText(4, QString::fromStdString(fullOwnerStdStr));
+            item->setText(5, integrityLevel);
+
+
+
+
+
+            CloseHandle(procH);
+            CloseHandle(tokenHandle);
+        }
+
+        //Network Discovery
+
 
 
 
